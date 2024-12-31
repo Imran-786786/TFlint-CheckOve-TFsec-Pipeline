@@ -1,0 +1,59 @@
+parameters:
+  - name: environment
+    type: string
+    default: dev
+    values:
+      - dev
+      - prod
+
+variables:
+  WORK_DIR: '$(System.DefaultWorkingDirectory)/environment/${{parameters.environment}}'
+
+trigger: none
+
+pool:
+ name: mySytem
+
+stages:
+  - stage: LintingScanningStage
+    displayName: Linting and Scanning stage
+    jobs:
+      - job: LintingScanningJob
+        displayName: Linting and Scanning job
+        steps:
+        - task: tfsec@1
+          displayName: 'Run tfsec'
+          inputs:
+            version: 'v1.26.0'
+            dir: '$(System.DefaultWorkingDirectory)'
+
+        - task: CmdLine@2
+          displayName: 'Run CheckOv'
+          inputs:
+            script: 'checkov -d . -o junitxml --output-file $(Common.TestResultsDirectory)/'
+            workingDirectory: $(System.DefaultWorkingDirectory)
+        - task: PublishTestResults@2
+          displayName: 'Publish Test Results'
+          condition: Always()
+          inputs:
+            testResultsFormat: 'JUnit'
+            testResultsFiles: '$(Common.TestResultsDirectory)/*.xml'
+            searchFolder: '$(System.DefaultWorkingDirectory)'
+            testRunTitle: 'checkov test results'
+            
+        - task: CmdLine@2
+          displayName: 'Run Tflint'
+          condition: Always()
+          inputs:
+            script: 'tflint --recursive --format=junit > $(Common.TestResultsDirectory)/tflint-results.xml'
+            workingDirectory: $(System.DefaultWorkingDirectory)
+        
+        - task: PublishTestResults@2
+          displayName: 'Publish Test Results'
+          condition: Always()
+          inputs:
+            testResultsFormat: 'JUnit'
+            testResultsFiles: '$(Common.TestResultsDirectory)/tflint-results.xml'
+            searchFolder: '$(System.DefaultWorkingDirectory)'
+            testRunTitle: 'Linting test results'
+           
